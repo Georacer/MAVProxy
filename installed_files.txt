@@ -1,0 +1,6 @@
+/home/george/.local/lib/python2.7/site-packages/MAVProxy-1.5.7-py2.7.egg
+/home/george/.local/bin/mp_slipmap.py
+/home/george/.local/bin/mp_tile.py
+/home/george/.local/bin/mavflightview.py
+/home/george/.local/bin/MAVExplorer.py
+/home/george/.local/bin/mavproxy.py
