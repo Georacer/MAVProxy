@@ -27,7 +27,7 @@
 #****************************************************************************
 
 # System Header files and Module Headers
-import time, math, sched, threading
+import time, math, sched, threading, os
 
 # Module Dependent Headers
 from pymavlink import mavutil
@@ -89,15 +89,18 @@ class SmartCameraModule(mp_module.MPModule):
         self.WirelessPort = sc_config.config.get_string("general", 'WirelessPort', "wlan0")
         self.u8RetryTimeout = 0
         self.u8MaxRetries = 5
+        self.outputPath = self.__vConfigureOutputPath() # Set where images should be saved
         self.tLastCheckTime = time.time()
         self.u8KillHeartbeatTimer = 100
         self.__vRegisterCameras()
 
         self.mpstate = mpstate
-        
+
+        self.debug = False
+
         # Start a 10 second timer to kill heartbeats as a workaround
         # threading.Timer(10, self.__vKillHeartbeat).start()
-    
+
 #****************************************************************************
 #   Method Name     : __vKillHeartbeat
 #
@@ -119,20 +122,46 @@ class SmartCameraModule(mp_module.MPModule):
         print("Killing Heartbeat - Solo Workaround")
         self.mpstate.settings.heartbeat = 0
 
- #****************************************************************************
- #   Method Name     : __vRegisterQXCamera
- #
- #   Description     : Tries to connect to a QX camera on the specified Wireless
- #                     port. If no camera is found it will retry every 5 seconds
- #                     until u8MaxRetries is reached.
- #
- #   Parameters      : None
- #
- #   Return Value    : None
- #
- #   Author           : Jaime Machuca
- #
- #****************************************************************************
+#****************************************************************************
+#   Method Name     : __vConfigureOutputPath
+#
+#   Description     : Configure the output path for saving captured images, if
+#                     one is provided in the configuration file
+#
+#   Parameters      : None
+#
+#   Return Value    : Image output path
+#
+#   Author          : George Zogopoulos
+#
+#****************************************************************************
+    def __vConfigureOutputPath(self):
+        print("Reading output path from smart_camera.cnf")
+        path = sc_config.config.get_string("general","outputPath",None)
+        if path == None: # No path specified
+            print("No output path specified")
+        # nop
+        else:
+            path = os.path.expanduser(path)
+            if not os.path.exists(path):
+                os.makedirs(path)
+        print("Output path set to %s" % path)
+        return path
+
+#****************************************************************************
+#   Method Name     : __vRegisterQXCamera
+#
+#   Description     : Tries to connect to a QX camera on the specified Wireless
+#                     port. If no camera is found it will retry every 5 seconds
+#                     until u8MaxRetries is reached.
+#
+#   Parameters      : None
+#
+#   Return Value    : None
+#
+#   Author           : Jaime Machuca
+#
+#****************************************************************************
 
     def __vRegisterQXCamera(self,u8CamNumber):
         if (self.u8RetryTimeout < self.u8MaxRetries):
@@ -188,7 +217,9 @@ class SmartCameraModule(mp_module.MPModule):
 #****************************************************************************
 #   Method Name     : __vCmdCamTrigger
 #
-#   Description     : Triggers all the cameras and stores Geotag information
+#   Description     : Triggers all the cameras and stores Geotag information.
+#                    Also saves the images if an output directory has been
+#                    provided
 #
 #   Parameters      : None
 #
@@ -203,7 +234,15 @@ class SmartCameraModule(mp_module.MPModule):
         #print(self.camera_list)
         for cam in self.camera_list:
             cam.take_picture()
-            print("Trigger Cam %s" % cam)
+            if self.debug:
+                print("Trigger Cam %s" % cam)
+            if self.outputPath is not None:
+                try:
+                    cam.save_picture(self.outputPath)
+                    if self.debug:
+                        print("Saved image from Cam %s" % cam)
+                except:
+                    print("Could not save image from Cam %s" % cam)
 
 #****************************************************************************
 #   Method Name     : __vCmdConnectCameras
@@ -371,7 +410,7 @@ class SmartCameraModule(mp_module.MPModule):
 #****************************************************************************
 
     def __vCmdGetAllPictures(self, args):
-        
+
         #Download Pictures
         if len(args) >= 1:
             slogFileName = args[0]
@@ -382,7 +421,7 @@ class SmartCameraModule(mp_module.MPModule):
             for cam in self.camera_list:
                 print("Init Picture Download for Cam %s" % cam)
                 cam.boGetAllSessionPictures(0)
-    
+
 #****************************************************************************
 #   Method Name     : __vDecodeDIGICAMConfigure
 #

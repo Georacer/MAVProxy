@@ -9,6 +9,7 @@ Image size is held in the smart_camera.cnf
 """
 
 import sys
+import os
 import time
 import math
 import cv2
@@ -38,6 +39,8 @@ class SmartCameraWebCam:
         # setup video capture
         self.camera = cv2.VideoCapture(self.instance)
 
+        self.debug = False
+
         # check we can connect to camera
         if not self.camera.isOpened():
             print "failed to open webcam %d" % self.instance
@@ -48,29 +51,34 @@ class SmartCameraWebCam:
 
     # latest_image - returns latest image captured
     def get_latest_image(self):
-        # write to file
-        #imgfilename = "C:\Users\rmackay9\Documents\GitHub\ardupilot-balloon-finder\smart_camera\img%d-%d.jpg" % (cam_num,cam.get_image_counter())
         imgfilename = "img%d-%d.jpg" % (self.instance,self.get_image_counter())
         print (imgfilename)
-        cv2.imwrite(imgfilename, self.latest_image)
         return self.latest_image
+
+    # save_picture - saves latest image captured
+    def save_picture(self, path):
+        imgfilename = path + "/" + "img%d-%d.jpg" % (self.instance,self.get_image_counter())
+        cv2.imwrite(imgfilename, self.latest_image)
+        if self.debug:
+            print("Saved image %s" % imgfilename)
+        return True
 
     # get_image_counter - returns number of images captured since startup
     def get_image_counter(self):
         return self.img_counter
 
     # take_picture - take a picture
-    #   returns True on success
+    # Returns True on success
     def take_picture(self):
         # setup video capture
-        print("Taking Picture")
+        print("%s Taking Picture" % self.config_group)
         self.camera = cv2.VideoCapture(self.instance)
         self.camera.set(cv2.cv.CV_CAP_PROP_FRAME_WIDTH,self.img_width)
         self.camera.set(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT,self.img_height)
 
         # check we can connect to camera
         if not self.camera.isOpened():
-            self.healty = False
+            self.healthy = False
             return False
 
         # get an image from the webcam
@@ -90,6 +98,9 @@ class SmartCameraWebCam:
     # main - tests SmartCameraWebCam class
     def main(self):
 
+        outputPath = os.path.expanduser("~/temp_image_folder/")
+        imgCounter = self.get_image_counter()
+        
         while True:
             # send request to image capture for image
             if self.take_picture():
@@ -97,6 +108,9 @@ class SmartCameraWebCam:
                 cv2.imshow ('image_display', self.get_latest_image())
             else:
                 print "no image"
+
+            if self.get_image_counter() != imgCounter: # A new image is captured
+                self.save_picture(outputPath)
 
             # check for ESC key being pressed
             k = cv2.waitKey(5) & 0xFF
