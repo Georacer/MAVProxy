@@ -211,6 +211,12 @@ class SmartCameraModule(mp_module.MPModule):
             if camera_type == 2:
                 self.__vRegisterQXCamera(i)
 
+            # fake camera
+            if camera_type == 3:
+                new_camera = SmartCameraFakeCamera(i)
+                self.camera_list = self.camera_list + [new_camera]
+
+
         # display number of cameras found
         print ("cameras found: %d" % len(self.camera_list))
 

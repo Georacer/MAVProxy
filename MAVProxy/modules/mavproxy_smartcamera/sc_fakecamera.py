@@ -1,24 +1,22 @@
 """
-sc_webcam.py
+sc_fakecamera.py
 
-This file includes functions to:
-    initialise a web cam
-    capture image from web cam
+Substitute camera, using a local image folder
 
-Image size is held in the smart_camera.cnf
+author: George Zogopoulos
+last edit: 2017/05/12
+
 """
 
-import sys
 import os
-import time
-import math
 import cv2
 import sc_config
+import time
 
-class SmartCameraWebCam:
 
-    def __init__(self, instance):
-
+class SmartCameraFakeCamera:
+    
+    def __init__(self,instance):
         # health
         self.healthy = True
 
@@ -26,36 +24,38 @@ class SmartCameraWebCam:
         self.instance = instance
         self.config_group = "camera%d" % self.instance
 
-        # get image resolution
-        self.img_width = sc_config.config.get_integer(self.config_group,'width',640)
-        self.img_height = sc_config.config.get_integer(self.config_group,'height',480)
-
         # background image processing variables
         self.img_counter = 0        # num images requested so far
 
         # latest image captured
         self.latest_image = None
 
-        # setup video capture
-        self.camera = cv2.VideoCapture(self.instance)
-
         self.debug = False
 
-        # check we can connect to camera
-        if not self.camera.isOpened():
-            print "failed to open webcam %d" % self.instance
+        # check if the image folder exists
+        config_group = "camera%d" % self.instance
+        path = sc_config.config.get_string(config_group, "imageFolder", None)
+        if path == None:
+            print("No image folder provided")
+            return
+
+        path = os.path.expanduser(path)
+        if not os.path.exists(path):
+            print("Provided image folder does not exist")
+            return
+
+        self.image_path = path
 
     # __str__ - print position vector as string
     def __str__(self):
-        return "SmartCameraWebCam Object W:%d H:%d" % (self.img_width, self.img_height)
-
+        return "SmartCameraFakeCamera Object @ %s" % self.image_path
+        
     # latest_image - returns latest image captured
     def get_latest_image(self):
-        imgfilename = "img%d-%d.jpg" % (self.instance,self.get_image_counter())
+        imgfilename = "img%d-%d.jpg" % (self.instance, self.get_image_counter())
         print (imgfilename)
         return self.latest_image
-
-    # save_picture - saves latest image captured
+    
     def save_picture(self, path):
         imgfilename = path + "/" + "img%d-%d.jpg" % (self.instance,self.get_image_counter())
         cv2.imwrite(imgfilename, self.latest_image)
@@ -70,26 +70,23 @@ class SmartCameraWebCam:
     # take_picture - take a picture
     # Returns True on success
     def take_picture(self):
-        # setup video capture
+        # setup image capture
         print("%s Taking Picture" % self.config_group)
-        self.camera = cv2.VideoCapture(self.instance)
-        self.camera.set(cv2.cv.CV_CAP_PROP_FRAME_WIDTH,self.img_width)
-        self.camera.set(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT,self.img_height)
-
-        # check we can connect to camera
-        if not self.camera.isOpened():
-            self.healthy = False
-            return False
-
-        # get an image from the webcam
-        success_flag, self.latest_image=self.camera.read()
-
-        # release camera
-        self.camera.release()
+        imagePath = self.image_path + "/" + "img%d-%d.jpg" % (self.instance, self.get_image_counter()+1)
+        if os.path.exists(imagePath):
+            try:
+                self.latest_image = cv2.imread(imagePath)
+                success_flag = True
+            except:
+                success_flag = False
+                print("Could not read image %s" % imagePath)
+        else:
+            success_flag = False
+            print("No more images to read or bad format")
 
         # if successful overwrite our latest image
         if success_flag:
-            self.img_counter = self.img_counter+1
+            self.img_counter = self.img_counter + 1
             return True
 
         # return failure
@@ -100,7 +97,7 @@ class SmartCameraWebCam:
 
         outputPath = os.path.expanduser("~/temp_image_folder2/")
         imgCounter = self.get_image_counter()
-        
+
         while True:
             # send request to image capture for image
             if self.take_picture():
@@ -119,9 +116,9 @@ class SmartCameraWebCam:
                 break
 
             # take a rest for a bit
-            time.sleep(0.01)
+            time.sleep(0.5)
 
 # run test run from the command line
 if __name__ == "__main__":
-    sc_webcam0 = SmartCameraWebCam(0)
-    sc_webcam0.main()
+    sc_fakecam0 = SmartCameraFakeCamera(0)
+    sc_fakecam0.main()
