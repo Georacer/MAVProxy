@@ -216,6 +216,11 @@ class SmartCameraModule(mp_module.MPModule):
                 new_camera = SmartCameraFakeCamera(i)
                 self.camera_list = self.camera_list + [new_camera]
 
+            # Parrot Sequoia
+            if camera_type == 4:
+                new_camera = SmartCameraSequoia(i)
+                self.camera_list = self.camera_list + [new_camera]
+
 
         # display number of cameras found
         print ("cameras found: %d" % len(self.camera_list))

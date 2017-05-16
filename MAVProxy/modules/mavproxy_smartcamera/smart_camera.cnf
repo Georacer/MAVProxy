@@ -1,5 +1,5 @@
 [camera0]
-# for no camera set type = 0, for webcam set type = 1
+# for no camera set type = 0, for webcam set type = 1, QX1 = 2, fake = 3, Parrot Sequoia = 4
 type = 2
 #width = 640
 #height = 480
