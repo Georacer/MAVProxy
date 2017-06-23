@@ -188,14 +188,16 @@ class SurveyFrame(wx.Frame):
                 print("processing new event of type %d" % event_type)
 
                 if event_type == sme.SM_SET_SLOT_NAME:
-                    print("Placeholder for setting slot name")
+                    index = event.get_arg('index')
+                    label = event.get_arg('value')
+                    self.radio_box_memory_slots.SetString(index, label)
 
-                if event_type == sme.SM_SET_POI:
+                elif event_type == sme.SM_SET_POI:
                     coords = event.get_arg("coords")
                     self.label_focused_POI_value.SetLabel("%f,%f" % coords)
 
                 else:
-                    print("Unhandled event type")
+                    print "Unhandled event type %d!" % event_type
 
 
 # end of class SurveyFrame
@@ -206,8 +208,9 @@ class SurveyManager(wx.App):
 
 if __name__ == "__main__":
     event_queue = makeIPCQueue()
+    gui_queue = makeIPCQueue()
     s_mgr = SurveyManager(0)
-    s_mgr.frame_1 = SurveyFrame(event_queue)
+    s_mgr.frame_1 = SurveyFrame(event_queue, gui_queue)
     s_mgr.SetTopWindow(s_mgr.frame_1)
     s_mgr.frame_1.Show()
     s_mgr.MainLoop()

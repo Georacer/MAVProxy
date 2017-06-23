@@ -33,8 +33,7 @@ from MAVProxy.modules.lib.multiprocessing_queue import makeIPCQueue
 
 from surveyManagerFrame import SurveyFrame
 import sm_event as sme
-# from surveyCreator import surveyCreator
-
+from surveyCreator import SurveyCreator
 
 class SurveyManagerModule(mp_module.MPModule):
     def __init__(self, mpstate):
@@ -44,21 +43,21 @@ class SurveyManagerModule(mp_module.MPModule):
         self.verbose = False
 
         self.mission_memory = [mavwp.MAVWPLoader() for count in xrange(10)]
-        self.input_mission_buffer = []  # Fills up with a temporary mission
+        self.input_mission_buffer = []  # Fills up with a temporary mission, as a list of waypoints
         self.num_wps_expected = 0
         self.recv_wp_index = {}
         self.event_queue = makeIPCQueue()  # Create the event queue, between GUI and backend
         self.gui_queue = makeIPCQueue()  # Create a queue from the backend to the GUI
         self.GUI = multiprocessing.Process(target=self.create_gui, args=(self.event_queue, self.gui_queue))  # Create and start the GUI in a separate process
+        self.survey_creator = SurveyCreator(self.target_system, self.target_component)
 
         # GUI interface
         self.selected_memory_slot = 0
         self.loaded_mission_name = None
-        self.survey_altitude = None
+        self.survey_altitude = 100
         self.POI_coordinates = None
-        self.survey_name = None
+        self.survey_name = "MyPOI"
         self.survey_pattern = None
-        self.center_point = None
 
         self.update_interval = 1  # seconds
         self.last_update = time.time()
@@ -148,10 +147,14 @@ class SurveyManagerModule(mp_module.MPModule):
             self.num_wps_expected = num_wps  # Is this needed?
             self.wps_received = {}
 
-
         elif event_type == sme.SM_CREATE:
-            print "Insert survey creation functionality here!"
-            # new_mission = surveyCreator(center, altitude, survey_type)
+            self.input_mission_buffer = self.survey_creator.create_survey(self.POI_coordinates, self.survey_altitude, self.survey_pattern)
+            self.mission_memory[self.selected_memory_slot].clear()
+            home = self.mpstate.module('wp').get_home()
+            self.mission_memory[self.selected_memory_slot].add(home)
+            for wp in self.input_mission_buffer:
+                self.mission_memory[self.selected_memory_slot].add(wp)
+            self.gui_queue.put(sme.SurveyManagerEvent(sme.SM_SET_SLOT_NAME, index=self.selected_memory_slot, value=self.survey_name))
 
         elif event_type == sme.SM_SET_MEMORY_SLOT:
             self.selected_memory_slot = event.get_arg('value')
@@ -164,19 +167,20 @@ class SurveyManagerModule(mp_module.MPModule):
             self.survey_altitude = event.get_arg('value')
 
         elif event_type == sme.SM_SET_COORDINATES:
-            self.POI_coordinates = [event.get_arg('lat'), event.get_arg('lon')]
+            self.POI_coordinates = (event.get_arg('lat'), event.get_arg('lon'))
+            self.gui_queue.put(sme.SurveyManagerEvent(sme.SM_SET_POI, coords=self.POI_coordinates))
 
         elif event_type == sme.SM_SET_SURVEY_PATTERN:
             self.survey_pattern = event.get_arg('value')
         else:
-            print "Unknown event type!"
+            print "Unhandled event type %d!" % event_type
 
     def update_POI(self, click_position):
         '''update the center point for new surveys'''
-        print "Got new center position"
-        print click_position
-        self.center_point = click_position
-        self.gui_queue.put(sme.SurveyManagerEvent(sme.SM_SET_POI, coords=self.center_point))
+        # print "Got new center position"
+        # print click_position
+        self.POI_coordinates = click_position
+        self.gui_queue.put(sme.SurveyManagerEvent(sme.SM_SET_POI, coords=self.POI_coordinates))
 
     def idle_task(self):
         '''called rapidly by mavproxy'''
