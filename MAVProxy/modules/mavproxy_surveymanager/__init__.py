@@ -135,29 +135,18 @@ class SurveyManagerModule(mp_module.MPModule):
 
         elif event_type == sme.SM_UPLOAD:
             self.mpstate.module('wp').wploader.clear()
+            print "Clearing wps in wp module"
             num_wps = self.mission_memory[self.selected_memory_slot].count()
-            print("Telling master to send %d wps" % num_wps)
-            self.master.waypoint_count_send(num_wps)
-            self.num_wps_expected =num_wps  # Is this needed?
-            self.wps_received = {}
 
-            for i in xrange(self.mission_memory[self.selected_memory_slot].count()):
+            for i in xrange(num_wps):
                 print "Adding wp %d to wp module" % i
                 self.mpstate.module('wp').wploader.add(self.mission_memory[self.selected_memory_slot].wp(i))
 
-            for i in xrange(self.mission_memory[self.selected_memory_slot].count()):
-                print "Telling master to send wp no %d" % i
-                self.master.mav.send(self.mpstate.module('wp').wploader.wp(i))
-                # tell the wp module to expect some waypoints
-                self.mpstate.module('wp').loading_waypoints = True
+            print("Telling wp module to send all waypoints")
+            self.mpstate.module('wp').send_all_waypoints()
 
-
-            # for i in xrange(self.mission_memory[self.selected_memory_slot].count()):
-            #     print "Sending wp %d from slot %d" % (self.mission_memory[self.selected_memory_slot].wp(i).seq, self.selected_memory_slot)
-            #     self.master.mav.send(self.mission_memory[self.selected_memory_slot].wp(i))
-
-            # tell the wp module to expect some waypoints
-            # self.module('wp').loading_waypoints = True
+            self.num_wps_expected = num_wps  # Is this needed?
+            self.wps_received = {}
 
 
         elif event_type == sme.SM_CREATE:
@@ -166,6 +155,7 @@ class SurveyManagerModule(mp_module.MPModule):
 
         elif event_type == sme.SM_SET_MEMORY_SLOT:
             self.selected_memory_slot = event.get_arg('value')
+            print (self.mission_memory[self.selected_memory_slot].view_list())
 
         elif event_type == sme.SM_SET_SURVEY_NAME:
             self.survey_name = event.get_arg('value')
@@ -211,7 +201,7 @@ class SurveyManagerModule(mp_module.MPModule):
             # write has been sent by the mission editor (?)
             elif (self.num_wps_expected > 1):
                 if (m.count != self.num_wps_expected):
-                    self.console.error("Unepxected waypoint count from APM after write (Editor)")
+                    self.console.error("Unexpected waypoint count from APM after write (Editor)")
                 # since this is a write operation from the Editor there
                 # should be no need to update number of table rows
 
