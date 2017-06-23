@@ -369,6 +369,9 @@ class MapModule(mp_module.MPModule):
             if self.module('misseditor') is not None:
                 self.module('misseditor').update_map_click_position(self.click_position)
 
+            if self.module('survey_manager') is not None:
+                self.module('survey_manager').update_POI(self.click_position)
+
         if obj.event.m_rightDown:
             if self.draw_callback is not None:
                 self.drawing_end()
@@ -385,6 +388,8 @@ class MapModule(mp_module.MPModule):
         self.mpstate.map_functions = {}
 
     def idle_task(self):
+        if self.module('surveymanager') is not None:
+            print("I can see sm")
         now = time.time()
         if self.last_unload_check_time + self.unload_check_interval < now:
             self.last_unload_check_time = now

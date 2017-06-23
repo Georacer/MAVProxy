@@ -16,6 +16,8 @@ SM_SET_SURVEY_NAME = 4
 SM_SET_ALTITUDE = 5
 SM_SET_COORDINATES = 6
 SM_SET_SURVEY_PATTERN = 7
+SM_SET_SLOT_NAME = 8
+SM_SET_POI = 9
 
 class SurveyManagerEvent:
     def __init__(self, event_type, **kwargs):
@@ -23,7 +25,7 @@ class SurveyManagerEvent:
         self.arg_dict = kwargs
 
         if not self.type in [SM_DOWNLOAD, SM_UPLOAD, SM_CREATE, SM_SET_MEMORY_SLOT, SM_SET_SURVEY_NAME, SM_SET_ALTITUDE,
-            SM_SET_COORDINATES, SM_SET_SURVEY_PATTERN]:
+            SM_SET_COORDINATES, SM_SET_SURVEY_PATTERN, SM_SET_SLOT_NAME, SM_SET_POI]:
             raise TypeError("Unrecongized SurveyManagerEvent type:" + str(self.type))
 
     def get_type(self):

@@ -39,18 +39,17 @@ import sm_event as sme
 class SurveyManagerModule(mp_module.MPModule):
     def __init__(self, mpstate):
         """Initialise module"""
-        super(SurveyManagerModule, self).__init__(mpstate, "survey_manager", "Survey Manager")
+        super(SurveyManagerModule, self).__init__(mpstate, "survey_manager", "Survey Manager", public=True)
 
         self.verbose = False
 
-        # self.mission_memory = [None] * 10  # Available memory slots
         self.mission_memory = [mavwp.MAVWPLoader() for count in xrange(10)]
-        # self.wploader = mavwp.MAVWPLoader()  # Auxiliary object for handling missions
-        self.input_mission_buffer = [] # Fills up with a temporary mission
+        self.input_mission_buffer = []  # Fills up with a temporary mission
         self.num_wps_expected = 0
         self.recv_wp_index = {}
         self.event_queue = makeIPCQueue()  # Create the event queue, between GUI and backend
-        self.GUI = multiprocessing.Process(target=self.create_gui, args=(self.event_queue,))  # Create and start the GUI in a separate process
+        self.gui_queue = makeIPCQueue()  # Create a queue from the backend to the GUI
+        self.GUI = multiprocessing.Process(target=self.create_gui, args=(self.event_queue, self.gui_queue))  # Create and start the GUI in a separate process
 
         # GUI interface
         self.selected_memory_slot = 0
@@ -59,8 +58,9 @@ class SurveyManagerModule(mp_module.MPModule):
         self.POI_coordinates = None
         self.survey_name = None
         self.survey_pattern = None
+        self.center_point = None
 
-        self.update_interval = 1 # seconds
+        self.update_interval = 1  # seconds
         self.last_update = time.time()
 
         self.module_settings = mp_settings.MPSettings(
@@ -102,12 +102,12 @@ class SurveyManagerModule(mp_module.MPModule):
         self.GUI.terminate()
         self = None
 
-    def create_gui(self, event_queue):
+    def create_gui(self, event_queue, gui_queue):
         mp_util.child_close_fds()
 
         self.app = wx.App(False)
         self.app.SetExitOnFrameDelete(True)
-        self.app.frame_1 = SurveyFrame(event_queue)
+        self.app.frame_1 = SurveyFrame(event_queue, gui_queue)
         self.app.SetTopWindow(self.app.frame_1)
         self.app.frame_1.Show()
         self.app.MainLoop()
@@ -170,6 +170,13 @@ class SurveyManagerModule(mp_module.MPModule):
             self.survey_pattern = event.get_arg('value')
         else:
             print "Unknown event type!"
+
+    def update_POI(self, click_position):
+        '''update the center point for new surveys'''
+        print "Got new center position"
+        print click_position
+        self.center_point = click_position
+        self.gui_queue.put(sme.SurveyManagerEvent(sme.SM_SET_POI, coords=self.center_point))
 
     def idle_task(self):
         '''called rapidly by mavproxy'''

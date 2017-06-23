@@ -9,7 +9,7 @@ George Zogopoulos
 June 2017
 '''
 
-import sm_event
+import sm_event as sme
 from MAVProxy.modules.lib.multiprocessing_queue import makeIPCQueue
 
 try:
@@ -30,8 +30,9 @@ else:
 
 
 class SurveyFrame(wx.Frame):
-    def __init__(self, parent_queue):
-        self.parent_queue = parent_queue
+    def __init__(self, event_queue, gui_queue):
+        self.event_queue = event_queue
+        self.gui_queue = gui_queue
 
         self.selected_memory_slot = 0
         self.loaded_mission_name = None
@@ -44,12 +45,11 @@ class SurveyFrame(wx.Frame):
         wx.Frame.__init__(self, None, wx.ID_ANY, "")
         self.label_memory = wx.StaticText(self, wx.ID_ANY, "UAV Memory:    ")
         self.label_memory_indicator = wx.StaticText(self, wx.ID_ANY, "Unsaved Mission")
-        self.radio_box_memory_slots = wx.RadioBox(self, wx.ID_ANY, "Memory Slots:",
-                                                  choices=["Slot 1", "Slot 2", "Slot 3", "Slot 4", "Slot 5", "Slot 6",
-                                                           "Slot 7", "Slot 8", "Slot 9", "Slot 10"], majorDimension=1,
-                                                  style=wx.RA_SPECIFY_COLS)
+        self.radio_box_memory_slots = wx.RadioBox(self, wx.ID_ANY, "Memory Slots:", choices=["Slot 1", "Slot 2", "Slot 3", "Slot 4", "Slot 5", "Slot 6", "Slot 7", "Slot 8", "Slot 9", "Slot 10"], majorDimension=1, style=wx.RA_SPECIFY_COLS)
         self.button_download = wx.Button(self, wx.ID_ANY, "Download from UAV")
         self.button_upload = wx.Button(self, wx.ID_ANY, "Upload to UAV")
+        self.label_focused_POI_text = wx.StaticText(self, wx.ID_ANY, "Currently focused coordinates: ")
+        self.label_focused_POI_value = wx.StaticText(self, wx.ID_ANY, "N/A")
         self.label_pattern = wx.StaticText(self, wx.ID_ANY, "Select survey pattern")
         self.choice_pattern = wx.Choice(self, wx.ID_ANY, choices=["Clover", "Loiter"])
         self.label_altitude = wx.StaticText(self, wx.ID_ANY, "Set survey altitude (home)")
@@ -80,9 +80,14 @@ class SurveyFrame(wx.Frame):
         self.survey_pattern = self.choice_pattern.GetString(self.choice_pattern.GetSelection())
         # print(self.survey_pattern)  # debug
 
+        # Set a timer to monitor the GUI event queue
+        self.timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self.process_gui_events, self.timer)
+        self.timer.Start(200)
+
     def __set_properties(self):
         # begin wxGlade: SurveyFrame.__set_properties
-        self.SetSize((720, 350))
+        self.SetSize((749, 378))
         self.radio_box_memory_slots.SetSelection(0)
         self.choice_pattern.SetSelection(0)
         self.text_ctrl_coordinates.SetMinSize((200, 27))
@@ -95,6 +100,7 @@ class SurveyFrame(wx.Frame):
         sizer_5 = wx.BoxSizer(wx.VERTICAL)
         sizer_7 = wx.BoxSizer(wx.VERTICAL)
         grid_sizer_1 = wx.GridSizer(4, 2, 0, 0)
+        sizer_8 = wx.BoxSizer(wx.HORIZONTAL)
         sizer_6 = wx.BoxSizer(wx.VERTICAL)
         sizer_3 = wx.BoxSizer(wx.VERTICAL)
         sizer_4 = wx.BoxSizer(wx.HORIZONTAL)
@@ -106,6 +112,9 @@ class SurveyFrame(wx.Frame):
         sizer_6.Add(self.button_download, 0, 0, 0)
         sizer_6.Add(self.button_upload, 0, 0, 0)
         sizer_5.Add(sizer_6, 1, 0, 0)
+        sizer_8.Add(self.label_focused_POI_text, 0, 0, 0)
+        sizer_8.Add(self.label_focused_POI_value, 0, 0, 0)
+        sizer_7.Add(sizer_8, 1, 0, 0)
         grid_sizer_1.Add(self.label_pattern, 0, 0, 0)
         grid_sizer_1.Add(self.choice_pattern, 0, 0, 0)
         grid_sizer_1.Add(self.label_altitude, 0, 0, 0)
@@ -125,35 +134,35 @@ class SurveyFrame(wx.Frame):
 
     def on_memory_select(self, event):  # wxGlade: SurveyFrame.<event_handler>
         self.selected_memory_slot = self.radio_box_memory_slots.GetSelection()
-        self.parent_queue.put(sm_event.SurveyManagerEvent(sm_event.SM_SET_MEMORY_SLOT,value=self.selected_memory_slot))
+        self.event_queue.put(sme.SurveyManagerEvent(sme.SM_SET_MEMORY_SLOT, value=self.selected_memory_slot))
         print("Selected slot %d" % self.selected_memory_slot)  # debug
         event.Skip()
 
     def on_download(self, event):  # wxGlade: SurveyFrame.<event_handler>
-        self.parent_queue.put(sm_event.SurveyManagerEvent(sm_event.SM_DOWNLOAD))
+        self.event_queue.put(sme.SurveyManagerEvent(sme.SM_DOWNLOAD))
         print "Download button pressed"  # debug
         event.Skip()
 
     def on_upload(self, event):  # wxGlade: SurveyFrame.<event_handler>
-        self.parent_queue.put(sm_event.SurveyManagerEvent(sm_event.SM_UPLOAD))
+        self.event_queue.put(sme.SurveyManagerEvent(sme.SM_UPLOAD))
         print "Upload button pressed"  # debug
         event.Skip()
 
     def on_pattern_select(self, event):  # wxGlade: SurveyFrame.<event_handler>
         self.survey_pattern = self.choice_pattern.GetString(self.choice_pattern.GetSelection())
-        self.parent_queue.put(sm_event.SurveyManagerEvent(sm_event.SM_SET_SURVEY_PATTERN,value=self.survey_pattern))
+        self.event_queue.put(sme.SurveyManagerEvent(sme.SM_SET_SURVEY_PATTERN, value=self.survey_pattern))
         print("Selected pattern %s" % self.survey_pattern)  # debug
         event.Skip()
 
     def on_altitude_enter(self, event):  # wxGlade: SurveyFrame.<event_handler>
         self.survey_altitude = int(float(self.text_ctrl_altitude.GetValue()))
-        self.parent_queue.put(sm_event.SurveyManagerEvent(sm_event.SM_SET_ALTITUDE,value=self.survey_altitude))
+        self.event_queue.put(sme.SurveyManagerEvent(sme.SM_SET_ALTITUDE, value=self.survey_altitude))
         print("Set survey altitude to %d" % self.survey_altitude)  # debug
         event.Skip()
 
     def on_name_enter(self, event):  # wxGlade: SurveyFrame.<event_handler>
         self.survey_name = self.text_ctrl_name.GetValue()
-        self.parent_queue.put(sm_event.SurveyManagerEvent(sm_event.SM_SET_SURVEY_NAME,value=self.survey_name))
+        self.event_queue.put(sme.SurveyManagerEvent(sme.SM_SET_SURVEY_NAME, value=self.survey_name))
         print("Survey slot name set to %s" % self.survey_name)  # debug
         event.Skip()
 
@@ -161,14 +170,32 @@ class SurveyFrame(wx.Frame):
         entered_text = self.text_ctrl_coordinates.GetValue()
         split_text = entered_text.strip().split(',')
         self.POI_coordinates = [float(text) for text in split_text]
-        self.parent_queue.put(sm_event.SurveyManagerEvent(sm_event.SM_SET_COORDINATES,lat=self.POI_coordinates[0],lon=self.POI_coordinates[1]))
+        self.event_queue.put(sme.SurveyManagerEvent(sme.SM_SET_COORDINATES, lat=self.POI_coordinates[0], lon=self.POI_coordinates[1]))
         print("Entered coordinates (%g,%g)" % (self.POI_coordinates[0], self.POI_coordinates[1]))  # debug
         event.Skip()
 
     def on_create(self, event):  # wxGlade: SurveyFrame.<event_handler>
-        self.parent_queue.put(sm_event.SurveyManagerEvent(sm_event.SM_CREATE))
+        self.event_queue.put(sme.SurveyManagerEvent(sme.SM_CREATE))
         print "Create button pressed"  # debug
         event.Skip()
+
+    def process_gui_events(self, timer_event):
+        '''Top-level method for processing events'''
+        while self.gui_queue.qsize() > 0:
+            event = self.gui_queue.get()
+            if event:
+                event_type = event.get_type()
+                print("processing new event of type %d" % event_type)
+
+                if event_type == sme.SM_SET_SLOT_NAME:
+                    print("Placeholder for setting slot name")
+
+                if event_type == sme.SM_SET_POI:
+                    coords = event.get_arg("coords")
+                    self.label_focused_POI_value.SetLabel("%f,%f" % coords)
+
+                else:
+                    print("Unhandled event type")
 
 
 # end of class SurveyFrame
