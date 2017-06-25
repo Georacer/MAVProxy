@@ -57,7 +57,7 @@ class SurveyManagerModule(mp_module.MPModule):
         self.survey_altitude = 100
         self.POI_coordinates = None
         self.survey_name = "MyPOI"
-        self.survey_pattern = None
+        self.survey_pattern = "Clover"
 
         self.update_interval = 1  # seconds
         self.last_update = time.time()
@@ -149,6 +149,8 @@ class SurveyManagerModule(mp_module.MPModule):
 
         elif event_type == sme.SM_CREATE:
             self.input_mission_buffer = self.survey_creator.create_survey(self.POI_coordinates, self.survey_altitude, self.survey_pattern)
+            if self.input_mission_buffer is None:
+                self.console.error("Invalid survey pattern type")
             self.mission_memory[self.selected_memory_slot].clear()
             home = self.mpstate.module('wp').get_home()
             self.mission_memory[self.selected_memory_slot].add(home)
