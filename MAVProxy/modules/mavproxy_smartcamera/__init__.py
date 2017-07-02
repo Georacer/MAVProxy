@@ -33,11 +33,13 @@ import time, math, sched, threading, os
 from pymavlink import mavutil
 from MAVProxy.modules.lib import mp_module
 from MAVProxy.modules.lib.mp_settings import MPSetting
-
+from MAVProxy.modules.lib.mp_util import gps_distance
 
 # Own Headers
 from sc_webcam import SmartCameraWebCam
 from sc_SonyQX1 import SmartCamera_SonyQX
+from sc_fakecamera import SmartCameraFakeCamera
+from sc_Sequoia import SmartCameraSequoia
 import sc_config
 
 #****************************************************************************
@@ -71,7 +73,7 @@ class SmartCameraModule(mp_module.MPModule):
 #****************************************************************************
 
     def __init__(self, mpstate):
-        super(SmartCameraModule, self).__init__(mpstate, "SmartCamera", "SmartCamera commands")
+        super(SmartCameraModule, self).__init__(mpstate, "SmartCamera", "SmartCamera commands", public=True)
         self.add_command('camtrigger', self.__vCmdCamTrigger, "Trigger camera")
         self.add_command('connectcams', self.__vCmdConnectCameras, "Connect to Cameras")
         self.add_command('setCamISO', self.__vCmdSetCamISO, "Set Camera ISO")
@@ -91,8 +93,13 @@ class SmartCameraModule(mp_module.MPModule):
         self.u8MaxRetries = 5
         self.outputPath = self.__vConfigureOutputPath() # Set where images should be saved
         self.tLastCheckTime = time.time()
+        self.tLastTriggerTime = time.time()
         self.u8KillHeartbeatTimer = 100
         self.__vRegisterCameras()
+
+        self.POI_coordinates = 2*[None]
+        self.trigger_distance_threshold = 100
+        self.lat_lon_alt = 3*[None]
 
         self.mpstate = mpstate
 
@@ -240,7 +247,7 @@ class SmartCameraModule(mp_module.MPModule):
 #
 #****************************************************************************
 
-    def __vCmdCamTrigger(self, args):
+    def __vCmdCamTrigger(self, args=[]):
         '''Trigger Camera'''
         #print(self.camera_list)
         for cam in self.camera_list:
@@ -521,35 +528,63 @@ class SmartCameraModule(mp_module.MPModule):
             print ("Trigger = %d" % mCommand_Long.param5)
             self.__vCmdCamTrigger(mCommand_Long)
 
+# ****************************************************************************
+#   Method Name     : update_POI
+#
+#   Description     : Called to set the POI coordinates
+#
+#   Parameters      : (lat,lon) float tuple
+#
+#   Return Value    : None
+#
+#   Author          : George Zogopoulos
+#
+# ****************************************************************************
 
+    def update_POI(self, coordinates):
+        '''update the Point Of Interest'''
+        self.POI_coordinates[0] = coordinates[0]
+        self.POI_coordinates[1] = coordinates[1]
 
 #****************************************************************************
 #   Method Name     : mavlink_packet
 #
-#   Description     : MAVProxy requiered callback function used to receive MAVlink
+#   Description     : MAVProxy required callback function used to receive MAVLink
 #                     packets
 #
 #   Parameters      : MAVLink Message
 #
 #   Return Value    : None
 #
-#   Author           : Jaime Machuca
+#   Author           : Jaime Machuca, George Zogopoulos
 #
 #****************************************************************************
 
     def mavlink_packet(self, m):
         '''handle a mavlink packet'''
         mtype = m.get_type()
+        if self.debug: print("Got message %s" % mtype)
         if mtype == "GLOBAL_POSITION_INT":
+            # Update the UAV position
+            self.lat_lon_alt[0] = m.lat*1.0e-7
+            self.lat_lon_alt[1] = m.lon*1.0e-7
+            self.lat_lon_alt[2] = m.alt*0.001
+            if self.debug: print("Got new position: " + "(%g, %g, %g)" % (self.lat_lon_alt[0], self.lat_lon_alt[1], self.lat_lon_alt[2]))
             for cam in self.camera_list:
-                cam.boSet_GPS(m)
+                try:
+                    cam.boSet_GPS(m)
+                except:
+                    pass
         if mtype == "ATTITUDE":
             for cam in self.camera_list:
-                cam.boSet_Attitude(m)
+                try:
+                    cam.boSet_Attitude(m)
+                except:
+                    pass
         if mtype == "CAMERA_STATUS":
-            print ("Got Message camera_status")
+            if self.debug: print ("Got Message camera_status")
         if mtype == "CAMERA_FEEDBACK":
-            print ("Got Message camera_feedback")
+            if self.debug: print ("Got Message camera_feedback")
             '''self.__vCmdCamTrigger(m)'''
         if mtype == "COMMAND_LONG":
             if m.command == mavutil.mavlink.MAV_CMD_DO_DIGICAM_CONFIGURE:
@@ -558,27 +593,46 @@ class SmartCameraModule(mp_module.MPModule):
             elif m.command == mavutil.mavlink.MAV_CMD_DO_DIGICAM_CONTROL:
                 print ("Got Message Digicam_control")
                 self.__vDecodeDIGICAMControl(m)
+        if mtype == "NAV_CONTROLLER_OUTPUT":
+            if self.debug: print("%dm away from next waypoint" % m.wp_dist)
+        if mtype in ['WAYPOINT', 'MISSION_ITEM']:
+            if m.command == mavutil.mavlink.MAV_CMD_DO_SET_ROI: # We intercepted a ROI message
+                if self.debug: print("Intercepted ROI mission item with coordinates (%g, %g)" % (m.x, m.y))
+                POI = (m.x, m.y)
+                self.update_POI(POI)
 
 #****************************************************************************
 #   Method Name     : idle_task
 #
-#   Description     : used for heartbeat work arround timer
+#   Description     : used for heartbeat work around timer
 #
 #   Parameters      : none
 #
 #   Return Value    : none
 #
-#   Author           : Jaime Machuca
+#   Author           : Jaime Machuca, George Zogopoulos
 #
 #****************************************************************************
 
     def idle_task(self):
         now = time.time()
+        # Kill heartbeat routine
         if not self.u8KillHeartbeatTimer == 0 and self.tLastCheckTime > 1:
             self.tLastCheckTime = now
             self.u8KillHeartbeatTimer -= 1
             if self.u8KillHeartbeatTimer == 0:
-                self.__vKillHeartbeat();
+                self.__vKillHeartbeat()
+
+        # Check distance from POI and trigger routine
+        if (now-self.tLastTriggerTime > 2) and (self.POI_coordinates[0] is not None):
+            self.tLastTriggerTime = now
+            # Calculate distance from POI-target
+            distance = gps_distance(self.POI_coordinates[0], self.POI_coordinates[1], self.lat_lon_alt[0], self.lat_lon_alt[1])
+            if distance < self.trigger_distance_threshold:
+                self.__vCmdCamTrigger()
+            if self.debug: print("Dinstance from target: %gm" % distance)
+
+
 
 #****************************************************************************
 #   Method Name     : init

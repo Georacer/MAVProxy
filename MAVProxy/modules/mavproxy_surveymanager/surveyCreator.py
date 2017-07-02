@@ -10,22 +10,28 @@ class SurveyCreator:
 
         self.system = target_system
         self.component = target_component
+        self.seq_no = 0
         self.scale = 200  # Pattern diameter in meters
         self.loiter_radius = 50
-        self.debug = True
+        self.debug = False
 
     def create_survey(self, poi, altitude=100, pattern="Loiter"):
         if pattern not in self.options:
             print("ERROR: Invalid pattern given")
             return None
         else:
-            return self.options[pattern](poi, altitude)
+            self.seq_no = 1
+            POI = self.create_ROI(poi[0], poi[1], 0, self.seq_no)
+            self.seq_no = self.seq_no + 1
+            pattern = self.options[pattern](poi, altitude)
+            return [POI] + pattern
 
     def loiter(self, poi, altitude):
         '''Generate a loiter pattern'''
         print("Creating a loiter with coordinates (%f,%f) and altitude %g") % (poi[0], poi[1], altitude)
         pattern = []
-        w = self.create_mission_item(poi[0], poi[1], altitude, mavutil.mavlink.MAV_CMD_NAV_LOITER_UNLIM, 1, 0, 0, self.loiter_radius, 0)
+        w = self.create_mission_item(poi[0], poi[1], altitude, mavutil.mavlink.MAV_CMD_NAV_LOITER_UNLIM, self.seq_no, 0, 0, self.loiter_radius, 0)
+        self.seq_no = self.seq_no + 1
         pattern.append(w)
         return pattern
 
@@ -49,13 +55,12 @@ class SurveyCreator:
         # Create WGS84 waypoints around the POI
         waypoints = [self.offset_waypoint(poi,offset) for offset in offsets]
         # Create mission items for each waypoint coordinate pair
-        seq_no = 1
         for pair in waypoints:
-            wp = self.create_waypoint(pair[0], pair[1], altitude, seq_no)
+            wp = self.create_waypoint(pair[0], pair[1], altitude, self.seq_no)
             pattern.append(wp)
-            seq_no = seq_no + 1
+            self.seq_no = self.seq_no + 1
         # Add a repeat command to the end
-        pattern.append(self.create_loop(seq_no))
+        pattern.append(self.create_loop(self.seq_no))
         return pattern
 
     def create_mission_item(self, lat, lon, alt, cmd_id, seq_no, param1, param2, param3, param4):
@@ -81,6 +86,11 @@ class SurveyCreator:
     def create_waypoint(self, lat, lon, alt, seq_no):
         if self.debug: print("Entered waypoint creator")
         w = self.create_mission_item(lat, lon, alt, mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, seq_no, 0, 0, 0, 0)
+        return w
+
+    def create_ROI(self, lat, lon, alt, seq_no):
+        if self.debug: print("Entered ROI creation")
+        w = self.create_mission_item(lat, lon, alt, mavutil.mavlink.MAV_CMD_DO_SET_ROI, seq_no, 3, 0, 0, 0)
         return w
 
     def create_loop(self, seq_no):

@@ -147,6 +147,12 @@ class SurveyManagerModule(mp_module.MPModule):
             self.num_wps_expected = num_wps  # Is this needed?
             self.wps_received = {}
 
+            # Inform the local SmartCamera module of the new POI
+            # This is called separately because MAVProxy modules do not intercept MAVLink messages derived from the same
+            # MAVProxy instance
+            if self.module('SmartCamera') is not None:
+                self.module('SmartCamera').update_POI(self.POI_coordinates)
+
         elif event_type == sme.SM_CREATE:
             self.input_mission_buffer = self.survey_creator.create_survey(self.POI_coordinates, self.survey_altitude, self.survey_pattern)
             if self.input_mission_buffer is None:
