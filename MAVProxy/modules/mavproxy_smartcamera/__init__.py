@@ -103,7 +103,7 @@ class SmartCameraModule(mp_module.MPModule):
 
         self.mpstate = mpstate
 
-        self.debug = False
+        self.debug = True
 
         # Start a 10 second timer to kill heartbeats as a workaround
         # threading.Timer(10, self.__vKillHeartbeat).start()
@@ -595,6 +595,15 @@ class SmartCameraModule(mp_module.MPModule):
                 self.__vDecodeDIGICAMControl(m)
         if mtype == "NAV_CONTROLLER_OUTPUT":
             if self.debug: print("%dm away from next waypoint" % m.wp_dist)
+        if mtype in ['WAYPOINT_COUNT', 'MISSION_COUNT']:
+        # A new mission is being uploaded, clear the POI
+        # A ensuing ROI mission item may re-update the POI
+            if self.debug: print("Intercepted MISSION_COUNT, clearing POI")
+            self.update_POI(2*[None])
+        if mtype in ['WAYPOINT_CLEAR_ALL', 'MISSION_CLEAR_ALL']:
+        # The mission is cleared, clear the POI
+            if self.debug: print("Intercepted WAYPOINT_CLEAR_ALL, clearing POI")
+            self.update_POI(2*[None])
         if mtype in ['WAYPOINT', 'MISSION_ITEM']:
             if m.command == mavutil.mavlink.MAV_CMD_DO_SET_ROI: # We intercepted a ROI message
                 if self.debug: print("Intercepted ROI mission item with coordinates (%g, %g)" % (m.x, m.y))
