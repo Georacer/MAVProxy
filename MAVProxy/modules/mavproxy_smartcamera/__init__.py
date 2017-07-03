@@ -103,7 +103,7 @@ class SmartCameraModule(mp_module.MPModule):
 
         self.mpstate = mpstate
 
-        self.debug = True
+        self.debug = False
 
         # Start a 10 second timer to kill heartbeats as a workaround
         # threading.Timer(10, self.__vKillHeartbeat).start()
@@ -563,7 +563,7 @@ class SmartCameraModule(mp_module.MPModule):
     def mavlink_packet(self, m):
         '''handle a mavlink packet'''
         mtype = m.get_type()
-        if self.debug: print("Got message %s" % mtype)
+        # if self.debug: print("Got message %s" % mtype)
         if mtype == "GLOBAL_POSITION_INT":
             # Update the UAV position
             self.lat_lon_alt[0] = m.lat*1.0e-7
