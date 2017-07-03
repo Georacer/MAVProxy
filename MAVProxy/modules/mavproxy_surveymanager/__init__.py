@@ -43,7 +43,9 @@ class SurveyManagerModule(mp_module.MPModule):
         self.verbose = False
 
         self.mission_memory = [mavwp.MAVWPLoader() for count in xrange(10)]
+        self.current_waypoint_memory = 10*[1]
         self.input_mission_buffer = []  # Fills up with a temporary mission, as a list of waypoints
+        self.current_waypoint_temp = 1
         self.num_wps_expected = 0
         self.recv_wp_index = {}
         self.event_queue = makeIPCQueue()  # Create the event queue, between GUI and backend
@@ -131,6 +133,7 @@ class SurveyManagerModule(mp_module.MPModule):
             # means I'm doing a read & don't know how many wps to expect:
             self.num_wps_expected = -1
             self.recv_wp_index = {}
+            self.current_waypoint_memory[self.selected_memory_slot] = self.current_waypoint_temp
 
         elif event_type == sme.SM_UPLOAD:
             self.mpstate.module('wp').wploader.clear()
@@ -143,6 +146,9 @@ class SurveyManagerModule(mp_module.MPModule):
 
             print("Telling wp module to send all waypoints")
             self.mpstate.module('wp').send_all_waypoints()
+
+            # Restore the current waypoint
+            self.master.waypoint_set_current_send(self.current_waypoint_memory[self.selected_memory_slot])
 
             self.num_wps_expected = num_wps  # Is this needed?
             self.wps_received = {}
@@ -245,6 +251,10 @@ class SurveyManagerModule(mp_module.MPModule):
                     self.recv_wp_index[m.seq] = True
             else:
                 print "Received mission item without requesting it (type=%s, seq=%d)" % (m.get_type(), m.seq)
+
+        elif mtype in ['WAYPOINT_CURRENT', 'MISSION_CURRENT']:
+        # Store the current waypoint for this mission, so as to resume there
+            self.current_waypoint_temp = m.seq
 
 def init(mpstate):
     '''initialise module'''
